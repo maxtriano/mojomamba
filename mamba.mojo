@@ -73,6 +73,12 @@ struct MambaBlock:
         self.dt_projection = LinearLayer(self.dt_rank, D_INNER)
         self.out_projection = LinearLayer(D_INNER, D_MODEL)
         self.conv1d = Conv1D()
+    
+    fn state_space_model(self):
+        pass
+
+    fn selective_scan(self):
+        pass
 
 fn run() -> Int:
     return 0
