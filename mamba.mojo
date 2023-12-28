@@ -103,7 +103,8 @@ struct MambaBlock:
             for l_index in range(l):
                 for d_in_index in range(d_in):
                     for n_index in range(n):
-                        output[b_index][d_in_index][l_index][n_index] += delta[b_index][l_index][d_in_index] * A[d_in_index][n_index]
+                        output[b_index][d_in_index][l_index][n_index] += 
+                            delta[b_index][l_index][d_in_index] * A[d_in_index][n_index]
         return output
 
     fn selective_scan(self, u: floattensor, delta: floattensor, 
