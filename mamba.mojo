@@ -6,6 +6,8 @@ from algorithm import vectorize
 from sys.info import simdwidthof
 import math
 from python import Python
+
+
 """
     B: batch size                       (`B` in Mamba paper [1] Algorithm 2)
     L: sequence length                  (`L` in [1] Algorithm 2)
@@ -25,6 +27,7 @@ let D_MODEL = 512
 let D_STATE = 128
 let EXPAND = 4
 let D_INNER = D_STATE * EXPAND
+alias simd_float32_width: Int = simdwidthof[DType.float32]()
 
 alias floattensor = Tensor[DType.float32]
 fn naive_matmul(A: floattensor, B: floattensor) -> floattensor:
@@ -34,6 +37,13 @@ fn naive_matmul(A: floattensor, B: floattensor) -> floattensor:
             for k in range(A.shape()[1]):
                 output[i][j] += A[i][k] * B[k][j]
     return output
+
+fn elementwise_exp(input: floattensor) -> floattensor:
+    var output: floattensor = Tensor[DType.float32](input.shape())
+    @parameter
+    fn exp_simd[simd_float32_width: Int](idx: Int) -> None:
+        output.simd_store[simd_float32_width](idx, math.exp(input.simd_load[simd_float32_width](idx)))
+    vectorize[simd_float32_width, exp_simd](input.num_elements())
 
 struct LinearLayer:
     var D_IN: Int
@@ -73,12 +83,41 @@ struct MambaBlock:
         self.dt_projection = LinearLayer(self.dt_rank, D_INNER)
         self.out_projection = LinearLayer(D_INNER, D_MODEL)
         self.conv1d = Conv1D()
-    
+
     fn state_space_model(self):
         pass
 
-    fn selective_scan(self):
-        pass
+    # Ugly but we'll keep it for now
+    fn einsum_bl_din_din_n_to_b_din_l_n(self, delta: Tensor[DType.float32], A: Tensor[DType.float32]) -> Tensor[DType.float32]:
+        var b = delta.shape()[0]
+        var l = delta.shape()[1]
+        var d_in = delta.shape()[2]
+
+        var n = A.shape()[1]
+        
+        # Initialize output tensor with the desired shape: 'b d_in l n'
+        var output = Tensor[DType.float32](b, d_in, l, n)
+
+        # Perform the operation
+        for b_index in range(b):
+            for l_index in range(l):
+                for d_in_index in range(d_in):
+                    for n_index in range(n):
+                        output[b_index][d_in_index][l_index][n_index] += delta[b_index][l_index][d_in_index] * A[d_in_index][n_index]
+        return output
+
+    fn selective_scan(self, u: floattensor, delta: floattensor, 
+                      A: floattensor, B: floattensor, C: floattensor, D: floattensor) raises -> floattensor:
+        let b = u.shape()[0]
+        let l = u.shape()[1]
+        let d_in = u.shape()[2]
+        let n = A.shape()[1]
+
+        var deltaA: floattensor = elementwise_exp(self.einsum_bl_din_din_n_to_b_din_l_n(delta, A)) 
+        var deltaB_u: floattensor
+
+        var x = Tensor[DType.float32](b, d_in, n)
+        var ys
 
 fn run() -> Int:
     return 0
