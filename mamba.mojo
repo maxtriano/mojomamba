@@ -88,7 +88,7 @@ struct MambaBlock:
         pass
 
     # Ugly but we'll keep it for now
-    fn einsum_bl_din_din_n_to_b_din_l_n(self, delta: Tensor[DType.float32], A: Tensor[DType.float32]) -> Tensor[DType.float32]:
+    fn einsum_deltaA(self, delta: Tensor[DType.float32], A: Tensor[DType.float32]) -> Tensor[DType.float32]:
         var b = delta.shape()[0]
         var l = delta.shape()[1]
         var d_in = delta.shape()[2]
@@ -104,7 +104,30 @@ struct MambaBlock:
                 for d_in_index in range(d_in):
                     for n_index in range(n):
                         output[b_index][d_in_index][l_index][n_index] += 
-                            delta[b_index][l_index][d_in_index] * A[d_in_index][n_index]
+                            delta[b_index][l_index][d_in_index] 
+                          * A[d_in_index][n_index]
+        return output
+
+    fn einsum_deltaB_u(self, delta: floattensor, B: floattensor, u: floattensor) -> floattensor:
+        var b = delta.shape()[0]
+        var l = delta.shape()[1]
+        var d_in = delta.shape()[2]
+
+        var n = B.shape()[2]
+    
+        # Initialize the output tensor
+        var output = Tensor[DType.float32](b, d_in, l, n)
+    
+        # Implementing the operation
+        for b_idx in range(b):
+            for l_idx in range(l):
+                for d_in_idx in range(d_in):
+                    for n_idx in range(n):
+                        # Summation over 'b', 'l', and 'd_in'
+                        output[b_idx][d_in_idx][l_idx][n_idx] += 
+                              delta[b_idx][l_idx][d_in_idx] 
+                            * B[b_idx][l_idx][n_idx]
+                            * u[b_idx][l_idx][d_in_idx]
         return output
 
     fn selective_scan(self, u: floattensor, delta: floattensor, 
@@ -114,8 +137,8 @@ struct MambaBlock:
         let d_in = u.shape()[2]
         let n = A.shape()[1]
 
-        var deltaA: floattensor = elementwise_exp(self.einsum_bl_din_din_n_to_b_din_l_n(delta, A)) 
-        var deltaB_u: floattensor
+        var deltaA: floattensor = elementwise_exp(self.einsum_deltaA(delta, A)) 
+        var deltaB_u: floattensor = self.einsum_deltaB_u(delta, B, u)
 
         var x = Tensor[DType.float32](b, d_in, n)
         var ys
